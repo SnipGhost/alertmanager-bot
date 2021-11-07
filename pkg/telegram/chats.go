@@ -66,6 +66,10 @@ func (c *AugmentedChat) CheckFilters(labels map[string]string) bool {
 			}
 			continue
 		}
+		// Deny alerts label with prohibited values (!val)
+		if _, deny_value := set["!"+label]; deny_value {
+			return false
+		}
 		// Allow any with asterisk
 		if _, allow_any_contained := set["*"]; allow_any_contained {
 			continue

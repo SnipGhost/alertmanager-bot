@@ -32,20 +32,41 @@ const (
 	commandSilenceAdd = "/silence_add"
 	commandSilence    = "/silence"
 	commandSilenceDel = "/silence_del"
+	commandFilters    = "/filters"
 
-	responseStart = "Hey, %s! I will now keep you up to date!\nEnabled filters: %s\n" + commandHelp
-	responseStop  = "Alright, %s! I won't talk to you again.\n" + commandHelp
-	responseHelp  = `
+	responseStart   = "Hey, %s! I will now keep you up to date!\nEnabled filters: %s\n" + commandHelp
+	responseStop    = "Alright, %s! I won't talk to you again.\n" + commandHelp
+	responseFilters = `
+You can set filters by passing arguments for ` + commandStart + ` command.
+
+Default: no arguments, send all alerts.
+All labels not passed as arguments - are allowed by default.
+Multiple labels can be passed as an argument.
+Arguments separated by whitespace.
+Each argument allow alerts containing the label with some value.
+
+Examples:
+` + commandStart + ` x=test - allow label 'x' only with value 'test'
+` + commandStart + ` a=x=y=z - allow label 'a' with any value from 'x,y,z'
+` + commandStart + ` key=_ - allow label 'key' omitted
+` + commandStart + ` key=* - allow label 'key' with any value
+` + commandStart + ` key=!x - deny all (use ! only with other operators)
+` + commandStart + ` key=!x=* - allow label 'key' with any value except 'x'
+` + commandStart + ` key=!x=*=_ - allow ALL except label 'key' with value 'x'
+` + commandStart + ` key=a env=b - allow both labels 'key' and 'env' with corresponding values
+`
+	responseHelp = `
 I'm a Prometheus AlertManager Bot for Telegram. I will notify you about alerts.
 You can also ask me about my ` + commandStatus + `, ` + commandAlerts + ` & ` + commandSilences + `
 
 Available commands:
-` + commandStart + ` - Subscribe for alerts.
+` + commandStart + ` [label=values ...] - Subscribe for alerts and set filters.
 ` + commandStop + ` - Unsubscribe for alerts.
 ` + commandStatus + ` - Print the current status.
 ` + commandAlerts + ` - List all alerts.
 ` + commandSilences + ` - List all silences.
 ` + commandChats + ` - List all users and group chats that subscribed.
+` + commandFilters + ` - List more info about filters.
 `
 )
 
@@ -184,6 +205,7 @@ func (b *Bot) Run(ctx context.Context, webhooks <-chan notify.WebhookMessage) er
 		commandStatus:   b.handleStatus,
 		commandAlerts:   b.handleAlerts,
 		commandSilences: b.handleSilences,
+		commandFilters:  b.handleFilters,
 	}
 
 	// init counters with 0
@@ -353,15 +375,34 @@ func (b *Bot) handleChats(message telebot.Message) {
 	}
 
 	list := ""
-	for _, chat := range chats {
+	var chatname string
+	for idx, chat := range chats {
 		if chat.IsGroupChat() {
-			list = list + fmt.Sprintf("@%s\n", chat.Title)
+			chatname = chat.Title
 		} else {
-			list = list + fmt.Sprintf("@%s\n", chat.Username)
+			chatname = chat.Username
 		}
+		list = list + fmt.Sprintf("[%d] @%s - %s\n\n", idx+1, chatname, chat.GetFiltersAsString())
 	}
 
-	b.telegram.SendMessage(message.Chat, "Currently these chat have subscribed:\n"+list, nil)
+	b.telegram.SendMessage(message.Chat, "Currently these chat have subscribed:\n\n"+list, nil)
+}
+
+func (b *Bot) handleFilters(message telebot.Message) {
+	var filters string
+	chats, err := b.chats.List()
+	if err == nil {
+		for _, chat := range chats {
+			if chat.ID == message.Chat.ID {
+				filters = "Currently applied filters:\n" + chat.GetFiltersAsString()
+				break
+			}
+		}
+	} else {
+		filters = "I can't get current filters."
+	}
+
+	b.telegram.SendMessage(message.Chat, filters+"\n"+responseFilters, nil)
 }
 
 func (b *Bot) handleStatus(message telebot.Message) {
