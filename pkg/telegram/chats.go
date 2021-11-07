@@ -18,7 +18,7 @@ type ChatStore struct {
 
 // AugmentedChat - telebot.Chat with user options to filter alerts by labels
 type AugmentedChat struct {
-	UserLabelFilters map[string]string
+	UserLabelFilters map[string]map[string]struct{}
 	telebot.Chat
 }
 
@@ -31,11 +31,15 @@ func NewChatStore(kv store.Store) (*ChatStore, error) {
 func NewAugmentedChat(message telebot.Message) AugmentedChat {
 	// First field is the command, like '/start', just skip it
 	payload := strings.Fields(message.Text)[1:]
-	userLabelFilters := make(map[string]string)
+	userLabelFilters := make(map[string]map[string]struct{})
 	for _, field := range payload {
-		data := strings.SplitN(field, "=", 2)
-		if len(data) == 2 {
-			userLabelFilters[data[0]] = data[1]
+		data := strings.Split(field, "=")
+		if len(data) > 1 {
+			set := make(map[string]struct{})
+			for _, value := range data[1:] {
+				set[value] = struct{}{}
+			}
+			userLabelFilters[data[0]] = set
 		}
 	}
 	return AugmentedChat{userLabelFilters, message.Chat}
@@ -43,9 +47,21 @@ func NewAugmentedChat(message telebot.Message) AugmentedChat {
 
 // CheckFilters - compare filters against labels and return true if filters passed
 func (c *AugmentedChat) CheckFilters(labels map[string]string) bool {
-	for key, value := range c.UserLabelFilters {
-		if label, ok := labels[key]; !ok || label != value {
-			fmt.Println("Failed filter: ", label, value)
+	for key, set := range c.UserLabelFilters {
+		label, contains_label := labels[key]
+		if !contains_label {
+			// Allow omit label with underscore
+			if _, allow_omitted := set["_"]; !allow_omitted {
+				return false
+			}
+			continue
+		}
+		// Allow any with asterisk
+		if _, allow_any_contained := set["*"]; allow_any_contained {
+			continue
+		}
+		// Set of label values in filters is not contain expected value
+		if _, ok := set[label]; !ok {
 			return false
 		}
 	}
