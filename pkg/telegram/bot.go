@@ -51,9 +51,9 @@ Available commands:
 
 // BotChatStore is all the Bot needs to store and read
 type BotChatStore interface {
-	List() ([]telebot.Chat, error)
-	Add(telebot.Chat) error
-	Remove(telebot.Chat) error
+	List() ([]AugmentedChat, error)
+	Add(AugmentedChat) error
+	Remove(AugmentedChat) error
 }
 
 // Bot runs the alertmanager telegram
@@ -295,6 +295,10 @@ func (b *Bot) sendWebhook(ctx context.Context, webhooks <-chan notify.WebhookMes
 			}
 
 			for _, chat := range chats {
+				if !chat.CheckFilters(w.CommonLabels) {
+					level.Debug(b.logger).Log("msg", "ignored by filter")
+					continue
+				}
 				err = b.telegram.SendMessage(chat, b.truncateMessage(out), &telebot.SendOptions{ParseMode: telebot.ModeHTML})
 				if err != nil {
 					level.Warn(b.logger).Log("msg", "failed to send message to subscribed chat", "err", err)
@@ -305,7 +309,8 @@ func (b *Bot) sendWebhook(ctx context.Context, webhooks <-chan notify.WebhookMes
 }
 
 func (b *Bot) handleStart(message telebot.Message) {
-	if err := b.chats.Add(message.Chat); err != nil {
+	ac := NewAugmentedChat(message)
+	if err := b.chats.Add(ac); err != nil {
 		level.Warn(b.logger).Log("msg", "failed to add chat to chat store", "err", err)
 		b.telegram.SendMessage(message.Chat, "I can't add this chat to the subscribers list.", nil)
 		return
@@ -320,7 +325,7 @@ func (b *Bot) handleStart(message telebot.Message) {
 }
 
 func (b *Bot) handleStop(message telebot.Message) {
-	if err := b.chats.Remove(message.Chat); err != nil {
+	if err := b.chats.Remove(NewAugmentedChat(message)); err != nil {
 		level.Warn(b.logger).Log("msg", "failed to remove chat from chat store", "err", err)
 		b.telegram.SendMessage(message.Chat, "I can't remove this chat from the subscribers list.", nil)
 		return
