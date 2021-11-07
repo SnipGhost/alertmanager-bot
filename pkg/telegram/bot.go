@@ -33,7 +33,7 @@ const (
 	commandSilence    = "/silence"
 	commandSilenceDel = "/silence_del"
 
-	responseStart = "Hey, %s! I will now keep you up to date!\n" + commandHelp
+	responseStart = "Hey, %s! I will now keep you up to date!\nEnabled filters: %s\n" + commandHelp
 	responseStop  = "Alright, %s! I won't talk to you again.\n" + commandHelp
 	responseHelp  = `
 I'm a Prometheus AlertManager Bot for Telegram. I will notify you about alerts.
@@ -316,7 +316,8 @@ func (b *Bot) handleStart(message telebot.Message) {
 		return
 	}
 
-	b.telegram.SendMessage(message.Chat, fmt.Sprintf(responseStart, message.Sender.FirstName), nil)
+	filters := ac.GetFiltersAsString()
+	b.telegram.SendMessage(message.Chat, fmt.Sprintf(responseStart, message.Sender.FirstName, filters), nil)
 	level.Info(b.logger).Log(
 		"user subscribed",
 		"username", message.Sender.Username,

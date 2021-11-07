@@ -22,11 +22,6 @@ type AugmentedChat struct {
 	telebot.Chat
 }
 
-// NewChatStore stores telegram chats in the provided kv backend
-func NewChatStore(kv store.Store) (*ChatStore, error) {
-	return &ChatStore{kv: kv}, nil
-}
-
 // NewAugmentedChat parse telebot.Message.Text field to get label filters
 func NewAugmentedChat(message telebot.Message) AugmentedChat {
 	// First field is the command, like '/start', just skip it
@@ -43,6 +38,21 @@ func NewAugmentedChat(message telebot.Message) AugmentedChat {
 		}
 	}
 	return AugmentedChat{userLabelFilters, message.Chat}
+}
+
+func (c *AugmentedChat) GetFiltersAsString() string {
+	if len(c.UserLabelFilters) == 0 {
+		return "Allowed ALL"
+	}
+	result := make([]string, 0, len(c.UserLabelFilters))
+	for key, set := range c.UserLabelFilters {
+		values := make([]string, 0, len(set))
+		for val := range set {
+			values = append(values, val)
+		}
+		result = append(result, key+"=("+strings.Join(values, "|")+")")
+	}
+	return strings.Join(result, " & ")
 }
 
 // CheckFilters - compare filters against labels and return true if filters passed
@@ -66,6 +76,11 @@ func (c *AugmentedChat) CheckFilters(labels map[string]string) bool {
 		}
 	}
 	return true
+}
+
+// NewChatStore stores telegram chats in the provided kv backend
+func NewChatStore(kv store.Store) (*ChatStore, error) {
+	return &ChatStore{kv: kv}, nil
 }
 
 // List all chats saved in the kv backend
